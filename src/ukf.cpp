@@ -70,6 +70,17 @@ UKF::UKF() {
 
 UKF::~UKF() {}
 
+template<typename T>
+void normalizeAngle(T &angle)
+{
+  angle = fmod(angle + M_PI, 2.*M_PI);
+  if (angle < 0)
+  {
+    angle += 2. * M_PI;
+  }
+  angle -= M_PI;
+}
+
 void UKF::ProcessMeasurement(MeasurementPackage meas_package) {
   /**
    * TODO: Complete this function! Make sure you switch between lidar and radar
@@ -77,12 +88,14 @@ void UKF::ProcessMeasurement(MeasurementPackage meas_package) {
    */
   if (!is_initialized_)
   {
-    double px, py, var_init1 = 1., var_init2 = 1000.;
+    double px, py, var_px, var_py, var_v = 1., var_angle = 1.;
 
     if (meas_package.sensor_type_ == MeasurementPackage::LASER)
     {
       px = meas_package.raw_measurements_(0);
       py = meas_package.raw_measurements_(1);
+      var_px = pow(std_laspx_, 2);
+      var_py = pow(std_laspy_, 2);
     }
     else
     {
@@ -90,14 +103,17 @@ void UKF::ProcessMeasurement(MeasurementPackage meas_package) {
              phi = meas_package.raw_measurements_(1);
       px = rho * cos(phi);
       py = rho * sin(phi);
-      var_init1 = 3.;
+      var_px    = pow(std_radr_, 2);
+      var_py    = var_px;
+      var_v     = pow(std_radrd_, 2);
+      var_angle = pow(std_radphi_, 2);
     }
-    x_ << px, py, 0., 0., 0.;
-    P_ << var_init1, 0., 0., 0., 0.,
-          0., var_init1, 0., 0., 0.,
-          0., 0., var_init2, 0., 0.,
-          0., 0., 0., var_init2, 0.,
-          0., 0., 0., 0., var_init2;
+    x_ << px, py, -0.3, 0., 0.;
+    P_ << var_px, 0., 0., 0., 0.,
+          0., var_py, 0., 0., 0.,
+          0., 0., var_v, 0., 0.,
+          0., 0., 0., var_angle, 0.,
+          0., 0., 0., 0., var_angle;
     
     time_us_ = meas_package.timestamp_;
     is_initialized_ = true;
@@ -208,8 +224,7 @@ void UKF::Prediction(double delta_t) {
   for (int i = 0; i < 2 * n_aug_ + 1; i++)
   {
     VectorXd x_diff = Xsig_pred_.col(i) - x_;
-    while (x_diff(3) >  M_PI) x_diff(3) -= 2. * M_PI;
-    while (x_diff(3) < -M_PI) x_diff(3) += 2. * M_PI;
+    normalizeAngle(x_diff(3));
     P_ += weights_(i) * x_diff * x_diff.transpose();
   }
 }
@@ -239,8 +254,7 @@ void UKF::UpdateLidar(MeasurementPackage meas_package) {
 
   // Measurement Update
   x_ += K * y;
-  while (x_(3) >  M_PI) x_(3) -= 2. * M_PI;
-  while (x_(3) < -M_PI) x_(3) += 2. * M_PI;
+  normalizeAngle(x_(3));
   MatrixXd I = MatrixXd::Identity(n_x_, n_x_);
   P_ = (I - K * H) * P_;
 }
@@ -282,8 +296,7 @@ void UKF::UpdateRadar(MeasurementPackage meas_package) {
   for (int i = 0; i < 2 * n_aug_ + 1; i++)
   {
     VectorXd z_diff = Zsig.col(i) - z_pred;
-    while (z_diff(1) >=  M_PI) z_diff(1) -= 2. * M_PI;
-    while (z_diff(1) <  -M_PI) z_diff(1) += 2. * M_PI;
+    normalizeAngle(z_diff(1));
     S += weights_(i) * z_diff * z_diff.transpose();
   }
 
@@ -299,10 +312,8 @@ void UKF::UpdateRadar(MeasurementPackage meas_package) {
   {
     VectorXd x_diff = Xsig_pred_.col(i) - x_;
     VectorXd z_diff = Zsig.col(i) - z_pred;
-    while (x_diff(3) >=  M_PI) x_diff(3) -= 2. * M_PI;
-    while (x_diff(3) <  -M_PI) x_diff(3) += 2. * M_PI;
-    while (z_diff(1) >=  M_PI) z_diff(1) -= 2. * M_PI;
-    while (z_diff(1) <  -M_PI) z_diff(1) += 2. * M_PI;
+    normalizeAngle(x_diff(3));
+    normalizeAngle(z_diff(1));
     Tc += weights_(i) * x_diff * z_diff.transpose();
   }
 
@@ -310,10 +321,9 @@ void UKF::UpdateRadar(MeasurementPackage meas_package) {
   K = Tc * S.inverse();
 
   VectorXd z_diff = z - z_pred;
-  while (z_diff(1) >=  M_PI) z_diff(1) -= 2. * M_PI;
-  while (z_diff(1) <  -M_PI) z_diff(1) += 2. * M_PI;
+  normalizeAngle(z_diff(1));
+  
   x_ += K * z_diff;
-  while (x_(3) >  M_PI) x_(3) -= 2. * M_PI;
-  while (x_(3) < -M_PI) x_(3) += 2. * M_PI;
+  normalizeAngle(x_(3));
   P_ -= K * S * K.transpose(); 
 }
