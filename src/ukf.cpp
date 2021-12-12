@@ -123,11 +123,11 @@ void UKF::ProcessMeasurement(MeasurementPackage meas_package) {
   const float dt = (meas_package.timestamp_ - time_us_) / 1000000.0;
   Prediction(dt);
   time_us_ = meas_package.timestamp_;
-  if (meas_package.sensor_type_ == MeasurementPackage::LASER)
+  if (meas_package.sensor_type_ == MeasurementPackage::LASER && use_laser_)
   {
     UpdateLidar(meas_package);
   }
-  else
+  else if (meas_package.sensor_type_ == MeasurementPackage::RADAR && use_radar_)
   {
     UpdateRadar(meas_package);
   }
